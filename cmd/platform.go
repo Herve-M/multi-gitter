@@ -7,6 +7,7 @@ import (
 
 	"github.com/lindell/multi-gitter/internal/http"
 	"github.com/lindell/multi-gitter/internal/multigitter"
+	"github.com/lindell/multi-gitter/internal/scm/azuredevopsservice"
 	"github.com/lindell/multi-gitter/internal/scm/bitbucketserver"
 	"github.com/lindell/multi-gitter/internal/scm/gitea"
 	"github.com/lindell/multi-gitter/internal/scm/github"
@@ -31,10 +32,11 @@ func configurePlatform(cmd *cobra.Command) {
 	flags.StringP("repo-search", "", "", "Use a repository search to find repositories to target (GitHub only). Forks are NOT included by default, use `fork:true` to include them. See the GitHub documentation for full syntax: https://docs.github.com/en/search-github/searching-on-github/searching-for-repositories.")
 	flags.StringP("code-search", "", "", "Use a code search to find a set of repositories to target (GitHub only). Repeated results from a given repository will be ignored, forks are NOT included by default (use `fork:true` to include them). See the GitHub documentation for full syntax: https://docs.github.com/en/search-github/searching-on-github/searching-code.")
 	flags.StringSliceP("topic", "", nil, "The topic of a GitHub/GitLab/Gitea repository. All repositories having at least one matching topic are targeted.")
-	flags.StringSliceP("project", "P", nil, "The name, including owner of a GitLab project in the format \"ownerName/repoName\".")
+	flags.StringSliceP("project", "P", nil, "The name, including owner of a GitLab/Azure DevOps project in the format \"ownerName/repoName\".")
 	flags.BoolP("include-subgroups", "", false, "Include GitLab subgroups when using the --group flag.")
 	flags.BoolP("ssh-auth", "", false, `Use SSH cloning URL instead of HTTPS + token. This requires that a setup with ssh keys that have access to all repos and that the server is already in known_hosts.`)
 	flags.BoolP("skip-forks", "", false, `Skip repositories which are forks.`)
+	flags.BoolP("skip-disabled", "", false, `Skip repositories which are disabled.`)
 
 	flags.StringP("platform", "p", "github", "The platform that is used. Available values: github, gitlab, gitea, bitbucket_server.")
 	_ = cmd.RegisterFlagCompletionFunc("platform", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -114,6 +116,8 @@ func getVersionController(flag *flag.FlagSet, verifyFlags bool, readOnly bool) (
 		return createGiteaClient(flag, verifyFlags)
 	case "bitbucket_server":
 		return createBitbucketServerClient(flag, verifyFlags)
+	case "azuredevops_service":
+		return createAzureDevOpsServiceClient(flag, verifyFlags)
 	default:
 		return nil, fmt.Errorf("unknown platform: %s", platform)
 	}
@@ -327,6 +331,33 @@ func createBitbucketServerClient(flag *flag.FlagSet, verifyFlags bool) (multigit
 	}
 
 	return vc, nil
+}
+
+func createAzureDevOpsServiceClient(flag *flag.FlagSet, verifyFlags bool) (multigitter.VersionController, error) {
+	gitBaseURL, _ := flag.GetString("base-url")
+	projects, _ := flag.GetStringSlice("project")
+	sshAuth, _ := flag.GetBool("ssh-auth")
+	skipForks, _ := flag.GetBool("skip-forks")
+
+	token, err := getToken(flag)
+	if err != nil {
+		return nil, err
+	}
+
+	ados, err := azuredevopsservice.New(token, gitBaseURL, azuredevopsservice.Config{
+		PatToken: token,
+		SSHAuth:  sshAuth,
+	}, azuredevopsservice.RepositoryListing{
+		Projects:  projects,
+		SkipForks: skipForks,
+	},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return ados, nil
 }
 
 // versionControllerCompletion is a helper function to allow for easier implementation of Cobra autocompletions that depend on a version controller
