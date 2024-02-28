@@ -2,17 +2,18 @@ package azuredevopsservice
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/microsoft/azure-devops-go-api/azuredevops/v7/git"
 )
 
 type repository struct {
-	id            string
-	url           string
-	name          string
-	projectName   string
-	projectId     string
-	defaultBranch string
+	project
+	id               string
+	url              string
+	name             string
+	defaultBranch    string
+	defaultBranchRef string
 }
 
 func (r repository) CloneURL() string {
@@ -28,6 +29,9 @@ func (r repository) FullName() string {
 }
 
 func (a *AzureDevOpsService) convertRepository(nativeRepository *git.GitRepository) (repository, error) {
+	if nativeRepository.DefaultBranch == nil {
+		return repository{}, fmt.Errorf("repository %s/%s is not initialized", *nativeRepository.Project.Name, *nativeRepository.Name)
+	}
 
 	var cloneURL string
 	if a.Config.SSHAuth {
@@ -37,11 +41,14 @@ func (a *AzureDevOpsService) convertRepository(nativeRepository *git.GitReposito
 	}
 
 	return repository{
-		id:            (*nativeRepository.Id).String(),
-		projectId:     (*nativeRepository.Project.Id).String(),
-		url:           cloneURL,
-		name:          *nativeRepository.Name,
-		projectName:   *nativeRepository.Project.Name,
-		defaultBranch: *nativeRepository.DefaultBranch,
+		project: project{
+			projectId:   nativeRepository.Project.Id.String(),
+			projectName: *nativeRepository.Project.Name,
+		},
+		id:               nativeRepository.Id.String(),
+		url:              cloneURL,
+		name:             *nativeRepository.Name,
+		defaultBranch:    strings.Replace(*nativeRepository.DefaultBranch, "refs/heads/", "", 1),
+		defaultBranchRef: *nativeRepository.DefaultBranch,
 	}, nil
 }

@@ -36,7 +36,6 @@ func configurePlatform(cmd *cobra.Command) {
 	flags.BoolP("include-subgroups", "", false, "Include GitLab subgroups when using the --group flag.")
 	flags.BoolP("ssh-auth", "", false, `Use SSH cloning URL instead of HTTPS + token. This requires that a setup with ssh keys that have access to all repos and that the server is already in known_hosts.`)
 	flags.BoolP("skip-forks", "", false, `Skip repositories which are forks.`)
-	flags.BoolP("skip-disabled", "", false, `Skip repositories which are disabled.`)
 
 	flags.StringP("platform", "p", "github", "The platform that is used. Available values: github, gitlab, gitea, bitbucket_server.")
 	_ = cmd.RegisterFlagCompletionFunc("platform", func(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
@@ -336,6 +335,7 @@ func createBitbucketServerClient(flag *flag.FlagSet, verifyFlags bool) (multigit
 func createAzureDevOpsServiceClient(flag *flag.FlagSet, verifyFlags bool) (multigitter.VersionController, error) {
 	gitBaseURL, _ := flag.GetString("base-url")
 	projects, _ := flag.GetStringSlice("project")
+	repos, _ := flag.GetStringSlice("repo")
 	sshAuth, _ := flag.GetBool("ssh-auth")
 	skipForks, _ := flag.GetBool("skip-forks")
 
@@ -344,20 +344,27 @@ func createAzureDevOpsServiceClient(flag *flag.FlagSet, verifyFlags bool) (multi
 		return nil, err
 	}
 
-	ados, err := azuredevopsservice.New(token, gitBaseURL, azuredevopsservice.Config{
-		PatToken: token,
-		SSHAuth:  sshAuth,
-	}, azuredevopsservice.RepositoryListing{
-		Projects:  projects,
-		SkipForks: skipForks,
-	},
+	projects, repositories, err := azuredevopsservice.ParseRepositoryReference(projects, repos)
+
+	scm, err := azuredevopsservice.New(
+		token,
+		gitBaseURL,
+		azuredevopsservice.Config{
+			PatToken: token,
+			SSHAuth:  sshAuth,
+		},
+		azuredevopsservice.RepositoryListing{
+			Projects:     projects,
+			Repositories: repositories,
+			SkipForks:    skipForks,
+		},
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return ados, nil
+	return scm, nil
 }
 
 // versionControllerCompletion is a helper function to allow for easier implementation of Cobra autocompletions that depend on a version controller

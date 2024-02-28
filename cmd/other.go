@@ -33,6 +33,8 @@ func getToken(flag *flag.FlagSet) (string, error) {
 			token = ght
 		} else if ght := os.Getenv("BITBUCKET_SERVER_TOKEN"); ght != "" {
 			token = ght
+		} else if ght := os.Getenv("AZURE_DEVOPS_CLOUD_TOKEN"); ght != "" {
+			token = ght
 		}
 	}
 
